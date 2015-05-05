@@ -1,6 +1,10 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Pipes.FileSystem where
+#if MIN_VERSION_base(4,8,0)
+#else
 import           Control.Applicative
+#endif
 import           Control.Monad
 import           Control.Monad.M
 import qualified Data.ByteString as BS
@@ -13,28 +17,28 @@ import           Database.SQLite.Simple
 import           Filesystem as F
 import           Filesystem.Path.CurrentOS ((</>))
 import qualified Filesystem.Path.CurrentOS as P
-import qualified Module as Ghc
+import           Haddock.Artifact
+import           Haddock.Sqlite
 import           Package.Conf
+import           PackageKey
 import           Pipes
 import           System.Directory ( doesDirectoryExist, getDirectoryContents )
 import qualified System.Directory as D
 import           Text.HTML.TagSoup
 import           Text.HTML.TagSoup.Match
-import           Haddock.Artifact
-import           Haddock.Sqlite
 
 -- TODO the utility of some of these fields is still unclear to me,
 -- at the moment they are filled simply to satisfy the docset spec.
-plist :: Ghc.PackageId -> BS.ByteString
+plist :: PackageKey -> BS.ByteString
 plist p = Data.ByteString.Char8.pack . unlines $
   [ "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
   , "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">"
   , "<plist version=\"1.0\">"
   , "<dict>"
   , "<key>CFBundleIdentifier</key>"
-  , "<string>" ++ Ghc.packageIdString p ++ "</string>"
+  , "<string>" ++ packageKeyString p ++ "</string>"
   , "<key>CFBundleName</key>"
-  , "<string>docset for Haskell package " ++ Ghc.packageIdString p ++ "</string>"
+  , "<string>docset for Haskell package " ++ packageKeyString p ++ "</string>"
   , "<key>DocSetPlatformFamily</key>"
   , "<string>haskell</string>" 
   , "<key>isDashDocset</key>"
@@ -45,8 +49,8 @@ plist p = Data.ByteString.Char8.pack . unlines $
   , "</plist>"
   ]
 
-docsetDir :: Ghc.PackageId -> P.FilePath
-docsetDir p = P.decodeString $ Ghc.packageIdString p ++ ".docset" 
+docsetDir :: PackageKey -> P.FilePath
+docsetDir p = P.decodeString $ packageKeyString p ++ ".docset" 
 
 leafs :: (P.FilePath -> Bool) -> P.FilePath -> ProducerM P.FilePath ()
 leafs incPred p = do
@@ -89,10 +93,10 @@ toRelativePath base path = do
        . length 
        . P.splitDirectories <$> toStripped pfx base 
 
-relativize :: Ghc.PackageId -> P.FilePath -> Either String T.Text 
+relativize :: PackageKey -> P.FilePath -> Either String T.Text 
 relativize package p = 
   let filename  = P.filename p
-      packageSubpath = P.decodeString $ Ghc.packageIdString package
+      packageSubpath = P.decodeString $ packageKeyString package
       matches = filter (packageSubpath ==) . reverse $ P.splitDirectories (P.parent p)
   in 
     T.pack . P.encodeString <$> 
@@ -101,7 +105,7 @@ relativize package p =
       else -- assume as a package doc file and make relative
         toRelativePath packageSubpath $ L.head matches </> filename
 
-convertUrl ::  Ghc.PackageId -> T.Text -> Either String T.Text 
+convertUrl ::  PackageKey -> T.Text -> Either String T.Text 
 convertUrl p urlExp 
   | T.null urlExp = Right T.empty
   | otherwise     =  
@@ -121,7 +125,7 @@ attributes src other            =
     ++ show other  ++ "\n in: \n" ++ P.encodeString src 
     
 -- | Convert local package-compiled haddock links to local relative. 
-convertLink :: Ghc.PackageId -> P.FilePath -> Tag' -> Either String Tag'
+convertLink :: PackageKey -> P.FilePath -> Tag' -> Either String Tag'
 convertLink package src tag =
   -- We're only interested in processing links             
   if not $ tagOpenLit "a" (anyAttrNameLit "href") tag then  
@@ -137,7 +141,7 @@ convertLink package src tag =
         url' <- convertUrl package url 
         Right . TagOpen "a" $ ("href", url') : preserved 
 
-pipe_htmlConvert :: Ghc.PackageId -> PipeM P.FilePath (P.FilePath, Maybe BS.ByteString) ()
+pipe_htmlConvert :: PackageKey -> PipeM P.FilePath (P.FilePath, Maybe BS.ByteString) ()
 pipe_htmlConvert p = 
   forever $ do
     src <- await
@@ -182,7 +186,7 @@ cons_writeFiles :: P.FilePath -> ConsumerM Conf ()
 cons_writeFiles docsets_root = forever $ do
   conf <- await
   
-  lift . msg $ "processing: " ++ (Ghc.packageIdString . pkg $ conf)
+  lift . msg $ "processing: " ++ (packageKeyString . pkg $ conf)
   let docset_folder = docsetDir (pkg conf) 
       dst_root      = docsets_root </> docset_folder 
       dst_doc_root  = dst_root </> P.decodeString "Contents/Resources/Documents/"

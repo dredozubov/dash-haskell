@@ -1,13 +1,18 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Haddock.Sqlite where
 import           Control.Monad.IO.Class
 import           Control.Monad.M
+#if MIN_VERSION_base(4,8,0)
+#else
 import           Data.Monoid
+#endif
 import qualified Data.Text as T
 import           Database.SQLite.Simple
 import           Haddock.Artifact
 import qualified Module as Ghc
 import qualified Name as Ghc
+import           PackageKey
 
 data IndexRow = IndexRow {
   nameAttr :: T.Text 
@@ -58,11 +63,11 @@ modUrl =
 escapeSpecial :: String -> String 
 escapeSpecial = 
   concatMap (\c -> if c `elem` specialChars then '-': show (fromEnum c) ++ "-" else [c])
-  where
-    specialChars  = "!&|+$%(,)*<>-/=#^\\?"
+  where specialChars :: String
+        specialChars = "!&|+$%(,)*<>-/=#^\\?"
  
 -- | Update the sqlite database with the given haddock artifact.
-fromArtifact :: Ghc.PackageId -> Connection -> Artifact -> M ()
+fromArtifact :: PackageKey -> Connection -> Artifact -> M ()
 fromArtifact p conn art = do
   attributes <- toAttributes
   case attributes of 
@@ -86,7 +91,7 @@ fromArtifact p conn art = do
          return Nothing 
        Package                 ->  
          return . Just $ 
-           (Ghc.packageIdString p, "Package", "index.html", [])
+           (Ghc.packageKeyString p, "Package", "index.html", [])
        Module ghcmod           -> 
          return . Just $
             (modStr ghcmod, "Module" , modUrl ghcmod ++ ".html" , modStr ghcmod)

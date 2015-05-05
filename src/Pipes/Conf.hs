@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 module Pipes.Conf where
 import           Control.Applicative
 import           Control.Monad
@@ -11,6 +13,7 @@ import qualified Filesystem.Path.CurrentOS as P
 import qualified Module as Ghc
 import           Package.Conf
 import qualified PackageConfig as Ghc
+import           PackageKey
 import           Pipes
 import qualified System.Directory as D
 
@@ -43,7 +46,11 @@ fromParseResults conf (ParseOk cabalWarnings fields)
       Conf 
         -- We're not using Cabal's type information beyond just
         -- extracting package data. Ghc types are used for the rest.
+#if MIN_VERSION_base(4,8,0)
+        _
+#else
         (Ghc.mkPackageId . sourcePackageId $ fields)
+#endif
         -- TODO Respect multiple interfaces, however 
         -- this is not the common consensus for use of haddock interfaces. 
         (P.decodeString (head $ haddockInterfaces fields))
@@ -71,6 +78,6 @@ pipe_Conf = forever $ do
   else 
     lift $
       do msg "\n"
-         warning $ "failed to process: " ++ Ghc.packageIdString (pkg c)
+         warning $ "failed to process: " ++ packageKeyString (pkg c)
          warning $ preposition "path errors" "in" "pkg conf file" pkg_db_conf errors
          msg "\n" 

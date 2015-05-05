@@ -16,7 +16,7 @@ import           Options.Applicative.Common
 import           Options.Cabal
 import           Options.CabalConstraints (toConstraints, none, CabalConstraints)
 import           Options.DbProvider
-import           PackageId
+import           PackageKey
 import           Pipes
 import qualified Data.Set as S
 
